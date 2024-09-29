@@ -1,0 +1,59 @@
+import paho.mqtt.client as mqtt
+import time
+import json
+
+mqtt_broker = "e87ade77417e4192b935704fa90aa325.s1.eu.hivemq.cloud"
+mqtt_port = 8883
+mqtt_user = "photo_mqtt1"
+mqtt_password = "PHOTO_mqtt1"
+topic_control = "esp32/control"
+
+# Define callback function for receiving messages
+def on_message(client, userdata, message):
+    try:
+        # Decode the received message payload from JSON
+        payload = json.loads(message.payload.decode())
+        print(f"Received message: {payload} on topic {message.topic}")
+        
+        # Check for mode selection and auto-control based on conditions
+        if message.topic == "esp32/mode" and "mode" in payload:
+            mode = payload["mode"]
+            if mode == "auto":
+                control_auto(client)
+            else:
+                print(f"Unknown mode: {mode}")
+    except json.JSONDecodeError:
+        print("Failed to decode JSON payload")
+
+# Function to control the robot in auto mode with JSON messages
+def control_auto(client):
+    for i in range (0,4):
+    	control_command = {"direction": "w", "duration": 2}
+    	client.publish(topic_control, json.dumps(control_command))  # Move forward
+    	time.sleep(2)
+    
+    	control_command = {"direction": "d", "duration": 1}
+    	client.publish(topic_control, json.dumps(control_command))  # Turn right
+    	time.sleep(1)
+
+# Setup MQTT client
+client = mqtt.Client("raspberry_pi_base")
+client.username_pw_set(mqtt_user, mqtt_password)
+client.on_message = on_message
+
+# Connect to MQTT broker
+client.tls_set()  # For SSL encryption
+client.connect(mqtt_broker, mqtt_port)
+
+# Subscribe to the mode topic to listen for mode changes
+client.subscribe("esp32/mode")
+
+# Start the MQTT loop to handle incoming messages
+client.loop_start()
+
+try:
+    while True:
+        time.sleep(1)
+except KeyboardInterrupt:
+    client.loop_stop()
+    client.disconnect()
